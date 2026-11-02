@@ -34,6 +34,33 @@ nonisolated struct TodayMember: Codable, Identifiable, Sendable {
     let id: Int
     let name: String
     let checkedInAt: String?
+    /// 지금 운동 중이면 시작 시각
+    let activeSince: String?
+}
+
+nonisolated struct WorkoutSession: Codable, Sendable {
+    let id: Int
+    let startedAt: String
+    let endedAt: String?
+}
+
+nonisolated struct SessionResponse: Codable, Sendable {
+    let session: WorkoutSession?
+    let unchanged: Bool
+}
+
+nonisolated struct CalendarEntry: Codable, Sendable {
+    struct Span: Codable, Sendable { let startedAt: String; let endedAt: String? }
+    let memberId: Int
+    let attendedAt: String?
+    let seconds: Int
+    let sessions: [Span]
+}
+
+nonisolated struct CalendarResponse: Codable, Sendable {
+    let month: String
+    let members: [Member]
+    let days: [String: [CalendarEntry]]
 }
 
 nonisolated struct TodayResponse: Codable, Sendable {
@@ -43,16 +70,6 @@ nonisolated struct TodayResponse: Codable, Sendable {
     let window: Window
     let gym: GymInfo
     let members: [TodayMember]
-}
-
-nonisolated struct HistoryResponse: Codable, Sendable {
-    struct Row: Codable, Identifiable, Sendable {
-        let id: Int
-        let name: String
-        let attended: [String: String]
-    }
-    let dates: [String]
-    let members: [Row]
 }
 
 nonisolated struct APIError: LocalizedError, Sendable {
@@ -102,7 +119,18 @@ nonisolated enum API {
         try await request("GET", "/api/today")
     }
 
-    static func history(days: Int = 14) async throws -> HistoryResponse {
-        try await request("GET", "/api/history?days=\(days)")
+    static func startSession(source: CheckinSource) async throws -> SessionResponse {
+        struct Body: Encodable { let source: CheckinSource }
+        return try await request("POST", "/api/sessions/start", body: Body(source: source))
+    }
+
+    static func endSession(source: CheckinSource) async throws -> SessionResponse {
+        struct Body: Encodable { let source: CheckinSource }
+        return try await request("POST", "/api/sessions/end", body: Body(source: source))
+    }
+
+    /// month: "YYYY-MM" (KST)
+    static func calendar(month: String) async throws -> CalendarResponse {
+        try await request("GET", "/api/calendar?month=\(month)")
     }
 }

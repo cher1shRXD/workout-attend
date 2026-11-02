@@ -1,8 +1,11 @@
 import CoreLocation
+import OSLog
 import UIKit
 
 /// 위치 권한, 헬스장 지오펜스(CLMonitor), 현재 위치 출석을 담당.
 /// 지오펜스에 들어가면 앱이 꺼져 있어도 iOS가 앱을 백그라운드로 깨워서 출석시킨다.
+private let log = Logger(subsystem: "workoutattend", category: "geofence")
+
 @Observable
 final class GymMonitor: NSObject, CLLocationManagerDelegate {
     static let shared = GymMonitor()
@@ -64,6 +67,7 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
     func startMonitoring() {
         guard monitorTask == nil else { return }
         monitorTask = Task {
+            log.info("monitor start")
             let monitor = await CLMonitor(Self.monitorName)
             self.monitor = monitor
             if !(await monitor.identifiers).contains(Self.conditionID) {
@@ -72,10 +76,15 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
             }
             do {
                 for try await event in await monitor.events where event.identifier == Self.conditionID {
-                    if event.state == .satisfied { await self.checkinInBackground() }
+                    log.info("event state=\(String(describing: event.state), privacy: .public)")
+                    switch event.state {
+                    case .satisfied: await self.didEnterGym()
+                    case .unsatisfied: await self.didLeaveGym()
+                    default: break
+                    }
                 }
             } catch {
-                print("CLMonitor error", error)
+                log.error("CLMonitor error \(error.localizedDescription, privacy: .public)")
             }
             self.monitorTask = nil
         }
@@ -87,20 +96,39 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
         await monitor?.remove(Self.conditionID)
     }
 
-    private func checkinInBackground() async {
+    /// 헬스장 도착: 운동 시작 기록 + (아침이면) 출석
+    private func didEnterGym() async {
         guard Keychain.token != nil else { return }
-        let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-checkin")
+        let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-enter")
         defer { UIApplication.shared.endBackgroundTask(bgTask) }
-        do {
-            let res = try await checkinHere(source: .geofence)
-            if !res.alreadyCheckedIn {
-                await Notifications.local(title: "출석 완료 💪", body: "\(Gym.name) 도착! 친구들에게 알렸어요.")
-            }
-            onCheckedIn?()
-        } catch {
-            // 아침 시간이 아니거나 위치가 애매하면 조용히 무시
-            print("geofence checkin skipped:", error.localizedDescription)
+
+        // 위치 측정이 필요 없는 운동 시작을 먼저 (백그라운드 시간이 짧다)
+        let session: SessionResponse?
+        do { session = try await API.startSession(source: .geofence) } catch {
+            log.error("start failed \(error.localizedDescription, privacy: .public)")
+            session = nil
         }
+        let startedNow = session.map { !$0.unchanged } ?? false
+        let checkin = try? await checkinHere(source: .geofence)
+        let checkedInNow = checkin.map { !$0.alreadyCheckedIn } ?? false
+
+        if checkedInNow {
+            await Notifications.local(title: "출석 완료 💪", body: "\(Gym.name) 도착! 운동 기록을 시작했어요.")
+        } else if startedNow, let s = session?.session, Format.isRecent(s.startedAt) {
+            // 잠깐 나갔다 들어와 이전 운동을 이어가는 경우엔 알리지 않는다
+            await Notifications.local(title: "운동 시작 🏋️", body: "\(Gym.name) 도착! 운동 기록을 시작했어요.")
+        }
+        onCheckedIn?()
+    }
+
+    /// 헬스장을 떠남: 운동 종료 기록
+    private func didLeaveGym() async {
+        guard Keychain.token != nil else { return }
+        let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-leave")
+        defer { UIApplication.shared.endBackgroundTask(bgTask) }
+        guard let res = try? await API.endSession(source: .geofence), !res.unchanged, let s = res.session else { return }
+        await Notifications.local(title: "운동 종료 👋", body: "오늘 \(Format.duration(from: s.startedAt, to: s.endedAt)) 운동했어요.")
+        onCheckedIn?()
     }
 
     // MARK: 현재 위치로 출석

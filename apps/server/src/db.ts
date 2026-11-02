@@ -28,4 +28,16 @@ export async function migrate(sql: Sql) {
       distance_m     INTEGER NOT NULL,
       PRIMARY KEY (member_id, date)
     )`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id            SERIAL PRIMARY KEY,
+      member_id     INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+      started_at    TIMESTAMPTZ NOT NULL,
+      ended_at      TIMESTAMPTZ,
+      start_source  TEXT NOT NULL,
+      end_source    TEXT
+    )`;
+  // 멤버당 진행 중인 운동은 하나만
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS sessions_one_open ON sessions (member_id) WHERE ended_at IS NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS sessions_started ON sessions (started_at)`;
 }

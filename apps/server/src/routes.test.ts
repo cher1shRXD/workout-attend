@@ -38,7 +38,7 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
     });
   });
   beforeEach(async () => {
-    await sql`TRUNCATE members, attendance RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE members, attendance, sessions RESTART IDENTITY CASCADE`;
     clock = new Date('2026-11-02T22:30:00Z');
   });
   after(() => sql.end());
@@ -98,5 +98,89 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
 
   it('토큰 없으면 401', async () => {
     assert.equal((await call('GET', '/api/today')).status, 401);
+  });
+
+  describe('운동 기록', () => {
+    const at = (iso: string) => (clock = new Date(iso));
+
+    it('수동 시작/종료, 중복 시작은 그대로', async () => {
+      const a = await join('태우');
+      at('2026-11-02T22:00:00Z'); // KST 11-03 07:00
+      const s1 = await call('POST', '/api/sessions/start', { source: 'manual' }, a);
+      assert.equal(s1.json.unchanged, false);
+      at('2026-11-02T22:10:00Z');
+      const s2 = await call('POST', '/api/sessions/start', { source: 'geofence' }, a);
+      assert.equal(s2.json.unchanged, true);
+      assert.equal(s2.json.session.id, s1.json.session.id);
+
+      const today = await call('GET', '/api/today', undefined, a);
+      assert.equal(today.json.members[0].activeSince, '2026-11-02T22:00:00.000Z');
+
+      at('2026-11-02T23:30:00Z');
+      const e = await call('POST', '/api/sessions/end', { source: 'manual' }, a);
+      assert.equal(e.json.session.endedAt, '2026-11-02T23:30:00.000Z');
+      assert.equal((await call('POST', '/api/sessions/end', {}, a)).json.unchanged, true);
+      assert.equal((await call('GET', '/api/today', undefined, a)).json.members[0].activeSince, null);
+    });
+
+    it('달력: KST 날짜로 묶고 총 시간 합산, 진행 중은 지금까지', async () => {
+      const a = await join('태우');
+      const b = await join('민수');
+      at('2026-11-02T22:00:00Z'); // KST 11-03 07:00
+      await call('POST', '/api/checkin', atGym, a);
+      await call('POST', '/api/sessions/start', {}, a);
+      at('2026-11-02T23:00:00Z');
+      await call('POST', '/api/sessions/end', {}, a);
+      at('2026-11-03T10:00:00Z'); // KST 19:00
+      await call('POST', '/api/sessions/start', {}, a);
+      at('2026-11-03T10:30:00Z');
+      await call('POST', '/api/sessions/start', {}, b);
+      at('2026-11-03T11:00:00Z');
+
+      const cal = await call('GET', '/api/calendar?month=2026-11', undefined, a);
+      assert.equal(cal.json.month, '2026-11');
+      const day = cal.json.days['2026-11-03'];
+      const ta = day.find((x: any) => x.memberId === 1);
+      const tb = day.find((x: any) => x.memberId === 2);
+      assert.equal(ta.seconds, 3600 + 3600); // 1시간 + 진행 중 1시간
+      assert.equal(ta.sessions.length, 2);
+      assert.ok(ta.attendedAt);
+      assert.equal(tb.seconds, 1800);
+      assert.equal(tb.attendedAt, null);
+      assert.deepEqual(Object.keys(cal.json.days), ['2026-11-03']);
+
+      // month 없으면 이번 달(KST)
+      assert.equal((await call('GET', '/api/calendar', undefined, a)).json.month, '2026-11');
+      assert.deepEqual((await call('GET', '/api/calendar?month=2026-10', undefined, a)).json.days, {});
+    });
+
+    it('위치로 끝난 직후 다시 들어오면 이어붙이고, 수동 종료 후엔 새로 시작', async () => {
+      const a = await join('태우');
+      at('2026-11-02T22:00:00Z');
+      const s1 = (await call('POST', '/api/sessions/start', { source: 'geofence' }, a)).json.session;
+      at('2026-11-02T22:30:00Z');
+      await call('POST', '/api/sessions/end', { source: 'geofence' }, a);
+      at('2026-11-02T22:35:00Z');
+      const s2 = (await call('POST', '/api/sessions/start', { source: 'geofence' }, a)).json.session;
+      assert.equal(s2.id, s1.id);
+      assert.equal(s2.endedAt, null);
+
+      at('2026-11-02T23:00:00Z');
+      await call('POST', '/api/sessions/end', { source: 'manual' }, a);
+      at('2026-11-02T23:01:00Z');
+      const s3 = (await call('POST', '/api/sessions/start', { source: 'manual' }, a)).json.session;
+      assert.notEqual(s3.id, s1.id);
+    });
+
+    it('종료를 놓친 운동은 4시간으로 자동 종료', async () => {
+      const a = await join('태우');
+      at('2026-11-02T22:00:00Z');
+      await call('POST', '/api/sessions/start', {}, a);
+      at('2026-11-03T08:00:00Z');
+      const today = await call('GET', '/api/today', undefined, a);
+      assert.equal(today.json.members[0].activeSince, null);
+      const cal = await call('GET', '/api/calendar?month=2026-11', undefined, a);
+      assert.equal(cal.json.days['2026-11-03'][0].seconds, 4 * 3600);
+    });
   });
 });

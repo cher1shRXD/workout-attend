@@ -7,7 +7,9 @@ final class AppModel {
 
     var phase: Phase = .loading
     var today: TodayResponse?
-    var history: HistoryResponse?
+    var calendar: CalendarResponse?
+    /// 달력에 보이는 달 (KST "YYYY-MM"). 처음엔 이번 달.
+    var calendarMonth: String = Format.currentMonth()
     var loadError: String?
 
     private var silentTriedDate: String?
@@ -19,6 +21,12 @@ final class AppModel {
     var myTodayCheckin: String? {
         guard let me else { return nil }
         return today?.members.first { $0.id == me.id }?.checkedInAt
+    }
+
+    /// 지금 내가 운동 중이면 시작 시각
+    var myActiveSince: String? {
+        guard let me else { return nil }
+        return today?.members.first { $0.id == me.id }?.activeSince
     }
 
     init() {
@@ -53,12 +61,18 @@ final class AppModel {
         await GymMonitor.shared.stopMonitoring()
         Keychain.setToken(nil)
         today = nil
-        history = nil
+        calendar = nil
         phase = .loggedOut
     }
 
     private func afterLogin() async {
-        await Notifications.requestPermission()
+        // 알림 권한 팝업 응답을 기다리지 않고 바로 데이터를 불러온다
+        #if DEBUG
+        let skipPrompt = UserDefaults.standard.bool(forKey: "debugNoPrompt")
+        #else
+        let skipPrompt = false
+        #endif
+        if !skipPrompt { Task { await Notifications.requestPermission() } }
         GymMonitor.shared.startMonitoring()
         await onForeground()
     }
@@ -66,9 +80,10 @@ final class AppModel {
     func refresh() async {
         do {
             async let t = API.today()
-            async let h = API.history(days: 14)
+            async let c = API.calendar(month: calendarMonth)
             today = try await t
-            history = try await h
+            let cal = try await c
+            if cal.month == calendarMonth { calendar = cal }
             if me?.id == -1 { phase = .loggedIn(try await API.me()) }
             loadError = nil
         } catch {
@@ -86,6 +101,23 @@ final class AppModel {
         if (try? await GymMonitor.shared.checkinHere(source: .manual)) != nil {
             await refresh()
         }
+    }
+
+    func showMonth(offset: Int) async {
+        calendarMonth = Format.month(calendarMonth, adding: offset)
+        let month = calendarMonth
+        if let cal = try? await API.calendar(month: month), month == calendarMonth { calendar = cal }
+    }
+
+    func startWorkout() async throws {
+        _ = try await API.startSession(source: .manual)
+        await refresh()
+    }
+
+    func endWorkout() async throws -> WorkoutSession? {
+        let res = try await API.endSession(source: .manual)
+        await refresh()
+        return res.session
     }
 
     func checkinNow() async throws -> CheckinResponse {

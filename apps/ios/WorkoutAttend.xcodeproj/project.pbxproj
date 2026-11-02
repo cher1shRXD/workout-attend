@@ -17,6 +17,7 @@
 		AF2F1310041283359978964B /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45FC465CB808AAF32EAD6CD2 /* Config.swift */; };
 		B2B3606BEDDCD73956AF970F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562B1B3663FFE5AE6A1B3B91 /* Keychain.swift */; };
 		E018061E61AF14A835BB4BA8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8951EDF4FDD4A70888AE3CDE /* Assets.xcassets */; };
+		ED98863D476EE125C67A8140 /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1668EC87CBE6A4A88C4B54 /* Format.swift */; };
 		EDC0565A5882D690B2351E40 /* WorkoutAttendApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66B6E32B3E49C25744241A5B /* WorkoutAttendApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -32,6 +33,7 @@
 		682113860420C1A281112179 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6F2DE0DDCD7F05C145E7C9B1 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		8951EDF4FDD4A70888AE3CDE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		8D1668EC87CBE6A4A88C4B54 /* Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Format.swift; sourceTree = "<group>"; };
 		E6B3B05033EEE54D99359836 /* GymMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymMonitor.swift; sourceTree = "<group>"; };
 		F68C02F7B64B7D0AC0463C24 /* JoinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -54,6 +56,7 @@
 			children = (
 				2DBFABF44543840320D793D7 /* API.swift */,
 				45FC465CB808AAF32EAD6CD2 /* Config.swift */,
+				8D1668EC87CBE6A4A88C4B54 /* Format.swift */,
 				E6B3B05033EEE54D99359836 /* GymMonitor.swift */,
 				562B1B3663FFE5AE6A1B3B91 /* Keychain.swift */,
 				3A262FD8F8EA2A8D7EEA9F7D /* Notifications.swift */,
@@ -170,6 +173,7 @@
 				A90C1D2E178B8B85D06CDDBE /* API.swift in Sources */,
 				5E20F14101AB38AC22B4524F /* AppModel.swift in Sources */,
 				AF2F1310041283359978964B /* Config.swift in Sources */,
+				ED98863D476EE125C67A8140 /* Format.swift in Sources */,
 				03240A79D64329B62306FB8E /* GymMonitor.swift in Sources */,
 				42182CCF7690E6708AE1FC5A /* HomeView.swift in Sources */,
 				080551A7D3F6C5EE06513BDB /* JoinView.swift in Sources */,

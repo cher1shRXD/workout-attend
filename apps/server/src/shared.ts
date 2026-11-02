@@ -46,6 +46,8 @@ export interface CheckinResponse {
 export interface TodayMember extends Member {
   /** ISO 시각. 안 왔으면 null */
   checkedInAt: string | null;
+  /** 지금 운동 중이면 시작 시각 */
+  activeSince: string | null;
 }
 
 export interface TodayResponse {
@@ -59,6 +61,36 @@ export interface TodayResponse {
 export interface HistoryResponse {
   dates: string[];
   members: (Member & { attended: Record<string, string> })[];
+}
+
+export type SessionSource = 'manual' | 'geofence';
+
+export interface WorkoutSession {
+  id: number;
+  startedAt: string;
+  /** 진행 중이면 null */
+  endedAt: string | null;
+}
+
+export interface SessionResponse {
+  session: WorkoutSession | null;
+  /** start: 이미 운동 중이었음 / end: 진행 중인 운동이 없었음 */
+  unchanged: boolean;
+}
+
+export interface CalendarEntry {
+  memberId: number;
+  attendedAt: string | null;
+  /** 그날 운동한 총 시간(초). 진행 중인 운동은 지금까지 */
+  seconds: number;
+  sessions: { startedAt: string; endedAt: string | null }[];
+}
+
+export interface CalendarResponse {
+  month: string;
+  members: Member[];
+  /** 날짜(YYYY-MM-DD, KST) → 기록 있는 멤버들 */
+  days: Record<string, CalendarEntry[]>;
 }
 
 export interface ApiError {

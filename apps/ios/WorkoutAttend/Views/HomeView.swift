@@ -5,6 +5,7 @@ struct HomeView: View {
     @State private var checking = false
     @State private var alert: (title: String, message: String)?
     @State private var confirmLogout = false
+    @State private var selectedDay: SelectedDay?
 
     private var monitor: GymMonitor { .shared }
 
@@ -14,15 +15,13 @@ struct HomeView: View {
                 if let error = model.loadError {
                     Section { Label(error, systemImage: "wifi.exclamationmark").foregroundStyle(.red) }
                 }
+                WorkoutSection(alert: $alert)
+                Section {
+                    CalendarView(selectedDay: $selectedDay)
+                }
                 todaySection
                 checkinSection
                 autoSection
-                if let history = model.history {
-                    Section("최근 2주") {
-                        HistoryGrid(history: history, meID: model.me?.id)
-                            .padding(.vertical, 4)
-                    }
-                }
             }
             .navigationTitle(title)
             .toolbar {
@@ -35,6 +34,20 @@ struct HomeView: View {
                 }
             }
             .refreshable { await model.refresh() }
+            #if DEBUG
+            // 시뮬레이터 확인용: -debugOpenDay 2026-11-01
+            .task {
+                if let d = UserDefaults.standard.string(forKey: "debugOpenDay") {
+                    try? await Task.sleep(for: .seconds(2))
+                    selectedDay = SelectedDay(id: d)
+                }
+            }
+            #endif
+            .sheet(item: $selectedDay) { day in
+                DaySheet(date: day.id)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .confirmationDialog("로그아웃할까요?", isPresented: $confirmLogout, titleVisibility: .visible) {
                 Button("로그아웃", role: .destructive) { Task { await model.logout() } }
             }
@@ -59,13 +72,18 @@ struct HomeView: View {
             if let today = model.today {
                 ForEach(today.members) { m in
                     HStack(spacing: 12) {
-                        Text(String(m.name.prefix(1)))
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(m.checkedInAt == nil ? Color.gray.opacity(0.4) : .green, in: .circle)
-                        Text(m.name).font(.body.weight(.semibold))
-                        if m.id == model.me?.id { Text("나").font(.caption).foregroundStyle(.secondary) }
+                        MemberAvatar(name: m.name, color: m.checkedInAt == nil ? Color.gray.opacity(0.4) : .green)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Text(m.name).font(.body.weight(.semibold))
+                                if m.id == model.me?.id { Text("나").font(.caption).foregroundStyle(.secondary) }
+                            }
+                            if let since = m.activeSince {
+                                Label("운동 중 · \(Format.time(since))부터", systemImage: "figure.strengthtraining.traditional")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
                         Spacer()
                         if let at = m.checkedInAt {
                             Label(Format.time(at), systemImage: "checkmark")
@@ -83,7 +101,7 @@ struct HomeView: View {
                 HStack { Spacer(); ProgressView(); Spacer() }
             }
         } header: {
-            if let today = model.today { Text(Format.day(today.date).label) }
+            if let today = model.today { Text("오늘 출석 · \(Format.day(today.date).label)") }
         }
     }
 
@@ -135,20 +153,20 @@ struct HomeView: View {
                 let res = try await model.checkinNow()
                 alert = res.alreadyCheckedIn
                     ? ("이미 출석했어요", "\(Format.time(res.checkedInAt)) 출석")
-                    : ("출석 완료 💪", "\(Format.time(res.checkedInAt)) 출석 · 친구들에게 알렸어요")
+                    : ("출석 완료 💪", "\(Format.time(res.checkedInAt)) 출석")
             } catch {
                 alert = ("출석 실패", error.localizedDescription)
             }
         }
     }
 
-    // MARK: 자동 출석
+    // MARK: 자동 기록
 
     private var autoSection: some View {
         Section {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("자동 출석").font(.headline)
+                    Text("자동 기록").font(.headline)
                     Text(autoDescription).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -164,47 +182,274 @@ struct HomeView: View {
 
     private var autoDescription: String {
         switch monitor.autoStatus {
-        case .on: "헬스장에 도착하면 앱을 안 열어도 출석돼요."
-        case .whenInUseOnly: "지금은 앱을 열 때만 자동 출석돼요. 위치를 \"항상\"으로 바꾸면 완전 자동."
-        case .notDetermined, .off: "위치 권한을 \"항상\" 허용하면 도착 시 자동으로 출석돼요."
+        case .on: "헬스장에 도착하면 출석과 운동 시작이, 떠나면 운동 종료가 자동으로 기록돼요."
+        case .whenInUseOnly: "위치를 \"항상\"으로 바꾸면 앱을 안 열어도 출석과 운동 시간이 자동으로 기록돼요."
+        case .notDetermined, .off: "위치 권한을 \"항상\" 허용하면 출석과 운동 시간이 자동으로 기록돼요."
         }
     }
 }
 
-struct HistoryGrid: View {
-    let history: HistoryResponse
-    let meID: Int?
+// MARK: - 운동 시작/종료
 
-    private var dates: [String] { history.dates.reversed() } // 오래된 날 → 오늘
+private struct WorkoutSection: View {
+    @Environment(AppModel.self) private var model
+    @Binding var alert: (title: String, message: String)?
+    @State private var busy = false
+    @State private var confirmEnd = false
 
     var body: some View {
-        Grid(horizontalSpacing: 0, verticalSpacing: 10) {
-            GridRow {
-                Color.clear.frame(width: 1, height: 1)
-                ForEach(dates, id: \.self) { d in
-                    let info = Format.day(d)
-                    Text("\(info.day)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(info.weekday == "일" || info.weekday == "토" ? Color.accentColor : .secondary)
+        Section {
+            VStack(spacing: 14) {
+                if let since = model.myActiveSince, let start = Format.date(since) {
+                    VStack(spacing: 4) {
+                        Label("운동 중", systemImage: "figure.strengthtraining.traditional")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.orange)
+                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                            Text(Format.clock(since: start, now: ctx.date))
+                                .font(.system(size: 44, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                        }
+                        Text("\(Format.time(since)) 시작").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    button(title: "운동 종료", systemImage: "stop.fill", tint: .red) { confirmEnd = true }
+                } else {
+                    VStack(spacing: 4) {
+                        Text("오늘도 운동하러 가볼까요?").font(.headline)
+                        Text("헬스장에 도착하면 자동으로 시작돼요").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    button(title: "운동 시작", systemImage: "play.fill", tint: .accentColor, action: start)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+        .confirmationDialog("운동을 종료할까요?", isPresented: $confirmEnd, titleVisibility: .visible) {
+            Button("운동 종료", role: .destructive, action: end)
+        }
+    }
+
+    private func button(title: String, systemImage: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if busy { ProgressView().tint(.white) } else { Label(title, systemImage: systemImage).bold().foregroundStyle(.white) }
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(tint)
+        .controlSize(.large)
+        .disabled(busy)
+    }
+
+    private func start() {
+        busy = true
+        Task {
+            defer { busy = false }
+            do { try await model.startWorkout() } catch { alert = ("운동 시작 실패", error.localizedDescription) }
+        }
+    }
+
+    private func end() {
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                if let s = try await model.endWorkout() {
+                    alert = ("운동 종료 👋", "\(Format.duration(from: s.startedAt, to: s.endedAt)) 운동했어요.")
+                }
+            } catch {
+                alert = ("운동 종료 실패", error.localizedDescription)
+            }
+        }
+    }
+}
+
+// MARK: - 달력
+
+struct SelectedDay: Identifiable {
+    let id: String // "YYYY-MM-DD"
+}
+
+/// 멤버별 고정 색 (id 순서대로)
+func memberColor(_ id: Int, in members: [Member]) -> Color {
+    let palette: [Color] = [.orange, .blue, .purple, .pink, .teal]
+    let index = members.firstIndex { $0.id == id } ?? 0
+    return palette[index % palette.count]
+}
+
+private struct CalendarView: View {
+    @Environment(AppModel.self) private var model
+    @Binding var selectedDay: SelectedDay?
+
+    /// 7칸씩 끊은 주 단위 행 (마지막 주는 빈칸으로 채움)
+    private func weeks(_ month: String) -> [[String?]] {
+        var cells = Format.calendarCells(month)
+        while cells.count % 7 != 0 { cells.append(nil) }
+        return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<$0 + 7]) }
+    }
+
+    var body: some View {
+        let month = model.calendarMonth
+        let todayYMD = Format.ymd(Date())
+        let cal = model.calendar?.month == month ? model.calendar : nil
+        let members = cal?.members ?? []
+
+        VStack(spacing: 12) {
+            HStack {
+                Button { Task { await model.showMonth(offset: -1) } } label: {
+                    Image(systemName: "chevron.left").padding(8)
+                }
+                Spacer()
+                Text(Format.monthTitle(month)).font(.headline)
+                Spacer()
+                Button { Task { await model.showMonth(offset: 1) } } label: {
+                    Image(systemName: "chevron.right").padding(8)
+                }
+                .disabled(month >= Format.currentMonth())
+            }
+            .buttonStyle(.borderless)
+
+            // List 안에서는 LazyVGrid 가 레이아웃 루프를 일으켜서 일반 HStack 행으로 그린다
+            HStack(spacing: 0) {
+                ForEach(Array(Format.weekdays.enumerated()), id: \.offset) { i, wd in
+                    Text(wd)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(i == 0 ? .red : i == 6 ? .blue : .secondary)
                         .frame(maxWidth: .infinity)
                 }
             }
-            ForEach(history.members) { m in
-                GridRow {
-                    HStack(spacing: 4) {
-                        Text(m.name).fontWeight(m.id == meID ? .bold : .regular).lineLimit(1)
-                        Text("\(dates.filter { m.attended[$0] != nil }.count)").foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                ForEach(Array(weeks(month).enumerated()), id: \.offset) { _, week in
+                    HStack(spacing: 0) {
+                        ForEach(Array(week.enumerated()), id: \.offset) { _, ymd in
+                            if let ymd {
+                                DayCell(
+                                    day: Format.day(ymd).day,
+                                    isToday: ymd == todayYMD,
+                                    isFuture: ymd > todayYMD,
+                                    dots: (cal?.days[ymd] ?? [])
+                                        .filter { $0.seconds > 0 || $0.attendedAt != nil }
+                                        .map { memberColor($0.memberId, in: members) }
+                                )
+                                .onTapGesture { if ymd <= todayYMD { selectedDay = SelectedDay(id: ymd) } }
+                            } else {
+                                Color.clear.frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                        }
                     }
-                    .font(.footnote)
-                    .frame(width: 72, alignment: .leading)
-                    ForEach(dates, id: \.self) { d in
-                        Circle()
-                            .fill(m.attended[d] != nil ? Color.green : Color.gray.opacity(0.2))
-                            .frame(width: 12, height: 12)
-                            .frame(maxWidth: .infinity)
+                }
+            }
+
+            if !members.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(members) { m in
+                        HStack(spacing: 4) {
+                            Circle().fill(memberColor(m.id, in: members)).frame(width: 8, height: 8)
+                            Text(m.name).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
         }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct DayCell: View {
+    let day: Int
+    let isToday: Bool
+    let isFuture: Bool
+    let dots: [Color]
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text("\(day)")
+                .font(.callout.weight(isToday ? .bold : .regular))
+                .foregroundStyle(isToday ? Color.white : isFuture ? Color.secondary.opacity(0.5) : Color.primary)
+                .frame(width: 30, height: 30)
+                .background(isToday ? Color.accentColor : .clear, in: .circle)
+            HStack(spacing: 2) {
+                ForEach(Array(dots.prefix(5).enumerated()), id: \.offset) { _, c in
+                    Circle().fill(c).frame(width: 5, height: 5)
+                }
+            }
+            .frame(height: 5)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(.rect)
+    }
+}
+
+// MARK: - 날짜 바텀시트
+
+private struct DaySheet: View {
+    @Environment(AppModel.self) private var model
+    let date: String
+
+    var body: some View {
+        let cal = model.calendar
+        let members = cal?.members ?? []
+        let entries = cal?.days[date] ?? []
+
+        NavigationStack {
+            List {
+                ForEach(members) { m in
+                    let e = entries.first { $0.memberId == m.id }
+                    Section {
+                        HStack(spacing: 12) {
+                            MemberAvatar(name: m.name, color: memberColor(m.id, in: members))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.name).font(.headline)
+                                if let at = e?.attendedAt {
+                                    Text("출석 \(Format.time(at))").font(.caption).foregroundStyle(.green)
+                                }
+                            }
+                            Spacer()
+                            if let e, !e.sessions.isEmpty {
+                                Text(Format.duration(seconds: totalSeconds(e)))
+                                    .font(.title3.bold())
+                                    .monospacedDigit()
+                            } else {
+                                Text("기록 없음").foregroundStyle(.secondary)
+                            }
+                        }
+                        ForEach(Array((e?.sessions ?? []).enumerated()), id: \.offset) { _, s in
+                            HStack {
+                                Text("\(Format.time(s.startedAt)) – \(s.endedAt.map(Format.time) ?? "진행 중")")
+                                Spacer()
+                                Text(Format.duration(from: s.startedAt, to: s.endedAt))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(Format.day(date).label)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    /// 진행 중인 운동은 지금까지로 계산
+    private func totalSeconds(_ e: CalendarEntry) -> Int {
+        e.sessions.reduce(0) { sum, s in
+            guard let start = Format.date(s.startedAt) else { return sum }
+            let end = s.endedAt.flatMap(Format.date) ?? Date()
+            return sum + max(0, Int(end.timeIntervalSince(start)))
+        }
+    }
+}
+
+struct MemberAvatar: View {
+    let name: String
+    let color: Color
+
+    var body: some View {
+        Text(String(name.prefix(1)))
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(width: 40, height: 40)
+            .background(color, in: .circle)
     }
 }

@@ -5,11 +5,15 @@ import {
   distanceMeters,
   kstParts,
   type CheckinRequest,
+  type CalendarEntry,
+  type CalendarResponse,
   type CheckinResponse,
   type HistoryResponse,
   type JoinResponse,
   type Member,
+  type SessionResponse,
   type TodayResponse,
+  type WorkoutSession,
 } from './shared.js';
 import type { Config } from './config.js';
 import type { Sql } from './db.js';
@@ -24,6 +28,16 @@ const safeEqual = (a: string, b: string) => {
   const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 };
+
+/** 위치 튐(지오펜스가 잠깐 나갔다 들어옴)으로 끝난 운동은 이 시간 안에 다시 시작하면 이어붙인다. */
+const RESUME_WITHIN_MINUTES = 10;
+
+type SessionRow = { id: number; started_at: Date; ended_at: Date | null };
+const toSession = (r: SessionRow): WorkoutSession => ({
+  id: r.id,
+  startedAt: r.started_at.toISOString(),
+  endedAt: r.ended_at ? r.ended_at.toISOString() : null,
+});
 
 const isCoord = (v: unknown, max: number) =>
   typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= max;
@@ -53,7 +67,6 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
     }
     await next();
   });
-
 
   // DB 연결까지 확인하는 헬스체크
   app.get('/api/health', async (c) => {
@@ -146,12 +159,106 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
     });
   });
 
+  /** 종료를 놓친 오래된 운동을 started_at + maxSessionHours 로 닫는다. */
+  const closeStaleSessions = (at: Date) => sql`
+    UPDATE sessions
+    SET ended_at = started_at + make_interval(hours => ${config.maxSessionHours}), end_source = 'timeout'
+    WHERE ended_at IS NULL AND started_at < ${at}::timestamptz - make_interval(hours => ${config.maxSessionHours})`;
+
+  app.post('/api/sessions/start', async (c) => {
+    const me = c.get('member');
+    const body = await c.req.json().catch(() => ({}));
+    const source = body.source === 'geofence' ? 'geofence' : 'manual';
+    const at = now();
+    await closeStaleSessions(at);
+
+    const [open] = await sql<SessionRow[]>`
+      SELECT id, started_at, ended_at FROM sessions WHERE member_id = ${me.id} AND ended_at IS NULL`;
+    if (open) return c.json<SessionResponse>({ session: toSession(open), unchanged: true });
+
+    // 자동 종료 직후 다시 들어온 거면 이전 운동을 이어간다
+    const [resumed] = await sql<SessionRow[]>`
+      UPDATE sessions SET ended_at = NULL, end_source = NULL
+      WHERE id = (
+        SELECT id FROM sessions
+        WHERE member_id = ${me.id} AND end_source = 'geofence'
+          AND ended_at > ${at}::timestamptz - make_interval(mins => ${RESUME_WITHIN_MINUTES})
+        ORDER BY ended_at DESC LIMIT 1
+      )
+      RETURNING id, started_at, ended_at`;
+    if (resumed) return c.json<SessionResponse>({ session: toSession(resumed), unchanged: false });
+
+    const [created] = await sql<SessionRow[]>`
+      INSERT INTO sessions (member_id, started_at, start_source)
+      VALUES (${me.id}, ${at}, ${source})
+      ON CONFLICT (member_id) WHERE ended_at IS NULL DO NOTHING
+      RETURNING id, started_at, ended_at`;
+    if (created) return c.json<SessionResponse>({ session: toSession(created), unchanged: false });
+
+    // 동시에 시작 요청이 두 번 온 경우
+    const [raced] = await sql<SessionRow[]>`
+      SELECT id, started_at, ended_at FROM sessions WHERE member_id = ${me.id} AND ended_at IS NULL`;
+    return c.json<SessionResponse>({ session: raced ? toSession(raced) : null, unchanged: true });
+  });
+
+  app.post('/api/sessions/end', async (c) => {
+    const me = c.get('member');
+    const body = await c.req.json().catch(() => ({}));
+    const source = body.source === 'geofence' ? 'geofence' : 'manual';
+    const at = now();
+    await closeStaleSessions(at);
+    const [ended] = await sql<SessionRow[]>`
+      UPDATE sessions SET ended_at = GREATEST(${at}::timestamptz, started_at), end_source = ${source}
+      WHERE member_id = ${me.id} AND ended_at IS NULL
+      RETURNING id, started_at, ended_at`;
+    return c.json<SessionResponse>({ session: ended ? toSession(ended) : null, unchanged: !ended });
+  });
+
+  app.get('/api/calendar', async (c) => {
+    const at = now();
+    const param = c.req.query('month') ?? '';
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(param) ? param : kstParts(at).date.slice(0, 7);
+    const first = `${month}-01`;
+    await closeStaleSessions(at);
+
+    const members = await sql<Member[]>`SELECT id, name FROM members ORDER BY id`;
+    const attendance = await sql<{ member_id: number; date: string; checked_in_at: Date }[]>`
+      SELECT member_id, date::text AS date, checked_in_at FROM attendance
+      WHERE date >= ${first}::date AND date < ${first}::date + interval '1 month'`;
+    const sessions = await sql<{ member_id: number; date: string; started_at: Date; ended_at: Date | null }[]>`
+      SELECT member_id, (started_at AT TIME ZONE 'Asia/Seoul')::date::text AS date, started_at, ended_at
+      FROM sessions
+      WHERE (started_at AT TIME ZONE 'Asia/Seoul') >= ${first}::date
+        AND (started_at AT TIME ZONE 'Asia/Seoul') < ${first}::date + interval '1 month'
+      ORDER BY started_at`;
+
+    const days: Record<string, CalendarEntry[]> = {};
+    const entry = (date: string, memberId: number) => {
+      const list = (days[date] ??= []);
+      let e = list.find((x) => x.memberId === memberId);
+      if (!e) list.push((e = { memberId, attendedAt: null, seconds: 0, sessions: [] }));
+      return e;
+    };
+    for (const a of attendance) entry(a.date, a.member_id).attendedAt = a.checked_in_at.toISOString();
+    for (const s of sessions) {
+      const e = entry(s.date, s.member_id);
+      const end = s.ended_at ?? at;
+      e.seconds += Math.max(0, Math.round((end.getTime() - s.started_at.getTime()) / 1000));
+      e.sessions.push({ startedAt: s.started_at.toISOString(), endedAt: s.ended_at?.toISOString() ?? null });
+    }
+    for (const list of Object.values(days)) list.sort((a, b) => a.memberId - b.memberId);
+    return c.json<CalendarResponse>({ month, members, days });
+  });
+
   app.get('/api/today', async (c) => {
-    const { date } = kstParts(now());
-    const rows = await sql<{ id: number; name: string; checked_in_at: Date | null }[]>`
-      SELECT m.id, m.name, a.checked_in_at
+    const at = now();
+    const { date } = kstParts(at);
+    await closeStaleSessions(at);
+    const rows = await sql<{ id: number; name: string; checked_in_at: Date | null; active_since: Date | null }[]>`
+      SELECT m.id, m.name, a.checked_in_at, s.started_at AS active_since
       FROM members m
       LEFT JOIN attendance a ON a.member_id = m.id AND a.date = ${date}
+      LEFT JOIN sessions s ON s.member_id = m.id AND s.ended_at IS NULL
       ORDER BY m.id`;
     return c.json<TodayResponse>({
       date,
@@ -161,6 +268,7 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
         id: r.id,
         name: r.name,
         checkedInAt: r.checked_in_at ? r.checked_in_at.toISOString() : null,
+        activeSince: r.active_since ? r.active_since.toISOString() : null,
       })),
     });
   });
