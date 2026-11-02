@@ -1,0 +1,46 @@
+# Xcode 프로젝트는 이 파일로 생성한다: `xcodegen generate`
+name: WorkoutAttend
+options:
+  bundleIdPrefix: dev.workoutattend
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    # 본인 Apple Developer Team ID 로 바꾸세요 (Xcode > Signing & Capabilities 에서 선택해도 됨)
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+configs:
+  Debug:
+    API_BASE_URL: "http://localhost:3000"
+  Release:
+    API_BASE_URL: "https://YOUR-PROJECT.vercel.app"
+targets:
+  WorkoutAttend:
+    type: application
+    platform: iOS
+    sources: [WorkoutAttend]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.workoutattend.app
+        PRODUCT_NAME: WorkoutAttend
+        INFOPLIST_KEY_CFBundleDisplayName: 헬스 출첵
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: WorkoutAttend/WorkoutAttend.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+    info:
+      path: WorkoutAttend/Info.plist
+      properties:
+        CFBundleDisplayName: 헬스 출첵
+        API_BASE_URL: $(API_BASE_URL)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [location, remote-notification]
+        NSLocationWhenInUseUsageDescription: 헬스장에 도착했는지 확인하려고 위치를 사용해요.
+        NSLocationAlwaysAndWhenInUseUsageDescription: 앱을 열지 않아도 헬스장에 도착하면 자동으로 출석 처리하려고 위치를 사용해요.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true

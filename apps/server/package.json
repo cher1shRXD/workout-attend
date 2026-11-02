@@ -1,0 +1,22 @@
+{
+  "name": "@workout/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/local.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx src/*.test.ts"
+  },
+  "dependencies": {
+    "hono": "^4.13.14",
+    "postgres": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "@hono/node-server": "^2.1.5"
+  },
+  "packageManager": "pnpm@11.13.0"
+}

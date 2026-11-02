@@ -1,0 +1,14 @@
+# 로컬 개발용 Postgres. `docker compose up -d`
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: workout
+      POSTGRES_PASSWORD: workout
+      POSTGRES_DB: workout
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
