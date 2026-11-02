@@ -2,7 +2,6 @@
 import { Hono } from 'hono';
 import { loadConfig } from './config.js';
 import { connect, migrate } from './db.js';
-import { apnsConfigFromEnv, createApnsSender } from './push.js';
 import { createApp } from './routes.js';
 
 const sql = connect();
@@ -13,7 +12,6 @@ app.route(
   createApp({
     sql,
     config: loadConfig(),
-    push: createApnsSender(apnsConfigFromEnv()),
     init: () => migrate(sql),
   }),
 );

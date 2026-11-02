@@ -29,14 +29,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Notifications.didReceive(deviceToken: deviceToken)
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("푸시 등록 실패", error)
-    }
-
     // 앱을 보고 있을 때도 배너 표시
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,

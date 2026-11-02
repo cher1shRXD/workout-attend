@@ -29,7 +29,6 @@ targets:
         PRODUCT_NAME: WorkoutAttend
         INFOPLIST_KEY_CFBundleDisplayName: 헬스 출첵
         TARGETED_DEVICE_FAMILY: "1"
-        CODE_SIGN_ENTITLEMENTS: WorkoutAttend/WorkoutAttend.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
     info:
@@ -39,7 +38,7 @@ targets:
         API_BASE_URL: $(API_BASE_URL)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIBackgroundModes: [location, remote-notification]
+        UIBackgroundModes: [location]
         NSLocationWhenInUseUsageDescription: 헬스장에 도착했는지 확인하려고 위치를 사용해요.
         NSLocationAlwaysAndWhenInUseUsageDescription: 앱을 열지 않아도 헬스장에 도착하면 자동으로 출석 처리하려고 위치를 사용해요.
         NSAppTransportSecurity:

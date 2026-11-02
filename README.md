@@ -14,7 +14,7 @@ apps/
 - **자동 출석**: 위치 권한을 "항상"으로 주면, 헬스장 반경에 들어갈 때 iOS가 앱을 백그라운드로 깨워서 출석시킨다(`CLMonitor` 지오펜스). 앱을 열지 않아도 된다.
 - **앱 열 때 자동 출석**: 앱을 열었는데 헬스장이면 조용히 출석 처리.
 - **수동 출석**: "지금 출석 체크" 버튼.
-- **친구 알림**: 누가 출석하면 나머지 친구들에게 푸시(APNs)가 간다.
+- **출석 알림**: 자동 출석이 되면 내 폰에 로컬 알림이 뜬다. 친구들 현황은 앱을 열어서 확인한다(서버 푸시 없음).
 - **판정은 서버가 한다**: 한국 시간 **4시~12시** 사이에 보낸 좌표가 헬스장 반경 안이어야 인정(GPS 오차 최대 50m까지 봐줌). 하루 1번만 기록된다.
 - **가입**: 이름과 공유 가입 코드(`GROUP_CODE`)로 가입하고 최대 3명까지. 폰을 바꾸면 같은 이름으로 다시 가입하면 된다.
 
@@ -62,23 +62,18 @@ Vercel 무료(Hobby) 플랜은 서버를 요청이 올 때만 실행하고, 잠�
 | 이름 | 필수 | 설명 |
 |---|---|---|
 | `GROUP_CODE` | ✅ | 친구들끼리만 아는 가입 코드 |
-| `APNS_KEY` | 푸시용 | Apple `.p8` 키 내용 (줄바꿈은 `\n` 으로 써도 됨) |
-| `APNS_KEY_ID` | 푸시용 | 키 ID |
-| `APNS_TEAM_ID` | 푸시용 | Apple Developer Team ID |
-| `APNS_BUNDLE_ID` | 푸시용 | 앱 번들 ID (`dev.workoutattend.app`, 바꿨다면 그 값) |
 | `MAX_MEMBERS` | | 기본 3 |
 | `MORNING_START_HOUR` / `MORNING_END_HOUR` | | 기본 4 / 12 (KST) |
 | `GYM_LATITUDE` / `GYM_LONGITUDE` / `GYM_RADIUS_METERS` | | 헬스장 좌표 덮어쓰기 |
 
-APNS_* 가 없으면 푸시만 안 가고 나머지는 정상 동작한다.
-
 ## 친구 폰에 설치하기
 
-1. Apple Developer Program(유료) 계정으로 Xcode > Signing & Capabilities 에서 Team을 선택한다. 번들 ID가 이미 쓰이고 있으면 `project.yml` 에서 바꾼다.
-2. developer.apple.com 에서 APNs 키(.p8)를 발급해 위 환경변수로 넣는다.
-3. Archive → **TestFlight** 로 올리고 친구 2명을 테스터로 초대한다.
-   - Release/TestFlight 빌드는 `aps-environment` 가 production 으로 서명되고, 앱이 그에 맞춰 서버에 토큰 환경을 알려준다.
-4. 각자 앱에서 이름과 가입 코드를 넣고, 위치 권한은 **"항상 허용"**, 알림은 허용한다.
+- **유료 Apple Developer Program (연 $99)**: Archive → **TestFlight** 로 올리고 친구 2명을 테스터로 초대한다. 가장 편하다.
+- **무료 Apple ID**: 각자 맥과 Xcode에서 자기 Apple ID를 Team으로 골라 폰에 직접 설치한다. 7일마다 다시 설치해야 한다.
+
+공통:
+1. Xcode > Signing & Capabilities 에서 Team을 선택한다. 번들 ID가 이미 쓰이고 있으면 `project.yml` 에서 바꾸고 `xcodegen generate` 한다.
+2. 각자 앱에서 이름과 가입 코드를 넣고, 위치 권한은 **"항상 허용"**, 알림은 허용한다.
 
 ## 헬스장 좌표
 

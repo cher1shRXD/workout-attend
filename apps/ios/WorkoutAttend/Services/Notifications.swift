@@ -1,29 +1,9 @@
-import UIKit
 import UserNotifications
 
+/// 내 폰에만 띄우는 로컬 알림 (자동 출석 완료 안내용). 서버 푸시는 쓰지 않는다.
 enum Notifications {
-    /// 받은 APNs 디바이스 토큰. 로그인 전에 받으면 로그인 후 전송.
-    private static var deviceToken: String?
-
-    static func requestAndRegister() async {
-        let center = UNUserNotificationCenter.current()
-        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-        if granted { UIApplication.shared.registerForRemoteNotifications() }
-    }
-
-    static func didReceive(deviceToken data: Data) {
-        deviceToken = data.map { String(format: "%02x", $0) }.joined()
-        Task { await uploadToken() }
-    }
-
-    static func uploadToken() async {
-        guard let deviceToken, Keychain.token != nil else { return }
-        #if DEBUG
-        let sandbox = true // Xcode 로 직접 설치한 빌드
-        #else
-        let sandbox = false // TestFlight / App Store
-        #endif
-        try? await API.savePushToken(deviceToken, sandbox: sandbox)
+    static func requestPermission() async {
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 
     static func local(title: String, body: String) async {

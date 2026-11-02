@@ -12,7 +12,6 @@ const url = process.env.TEST_DATABASE_URL;
 describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
   let sql: Sql;
   let clock = new Date('2026-11-02T22:30:00Z'); // KST 11-03 07:30
-  const pushes: { targets: { token: string; env: string }[]; body: string }[] = [];
   let app: ReturnType<typeof createApp>;
 
   const call = async (method: string, path: string, body?: unknown, token?: string) => {
@@ -35,13 +34,11 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
     app = createApp({
       sql,
       config: loadConfig({ GROUP_CODE: 'secret' }),
-      push: async (targets, _t, body) => void pushes.push({ targets, body }),
       now: () => clock,
     });
   });
   beforeEach(async () => {
     await sql`TRUNCATE members, attendance RESTART IDENTITY CASCADE`;
-    pushes.length = 0;
     clock = new Date('2026-11-02T22:30:00Z');
   });
   after(() => sql.end());
@@ -62,20 +59,17 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
     assert.equal((await call('GET', '/api/me', undefined, t1b)).json.name, '태우');
   });
 
-  it('헬스장에서 아침에 출석, 친구에게 푸시', async () => {
+  it('헬스장에서 아침에 출석, 하루 한 번만 기록', async () => {
     const a = await join('태우');
     const b = await join('민수');
-    await call('PUT', '/api/push-token', { token: 'ab'.repeat(32), environment: 'sandbox' }, b);
 
     const r = await call('POST', '/api/checkin', atGym, a);
     assert.equal(r.status, 200);
     assert.equal(r.json.date, '2026-11-03');
     assert.equal(r.json.alreadyCheckedIn, false);
-    assert.deepEqual(pushes[0].targets, [{ token: 'ab'.repeat(32), env: 'sandbox' }]);
 
     const again = await call('POST', '/api/checkin', atGym, a);
     assert.equal(again.json.alreadyCheckedIn, true);
-    assert.equal(pushes.length, 1);
 
     const today = await call('GET', '/api/today', undefined, b);
     assert.equal(today.json.date, '2026-11-03');

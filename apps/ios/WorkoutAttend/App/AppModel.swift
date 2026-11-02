@@ -58,8 +58,7 @@ final class AppModel {
     }
 
     private func afterLogin() async {
-        await Notifications.requestAndRegister()
-        await Notifications.uploadToken()
+        await Notifications.requestPermission()
         GymMonitor.shared.startMonitoring()
         await onForeground()
     }

@@ -65,8 +65,6 @@ nonisolated struct APIError: LocalizedError, Sendable {
 
 nonisolated enum API {
     private struct ErrorBody: Decodable { let error: String }
-    private struct OK: Decodable {}
-    private struct Empty: Encodable {}
 
     private static func request<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws -> T {
         var req = URLRequest(url: URL(string: path, relativeTo: AppConfig.apiBaseURL)!.absoluteURL)
@@ -94,11 +92,6 @@ nonisolated enum API {
 
     static func me() async throws -> Member {
         try await request("GET", "/api/me")
-    }
-
-    static func savePushToken(_ token: String, sandbox: Bool) async throws {
-        struct Body: Encodable { let token: String; let environment: String }
-        let _: OK = try await request("PUT", "/api/push-token", body: Body(token: token, environment: sandbox ? "sandbox" : "production"))
     }
 
     static func checkin(_ body: CheckinRequest) async throws -> CheckinResponse {

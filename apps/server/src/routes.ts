@@ -13,7 +13,6 @@ import {
 } from './shared.js';
 import type { Config } from './config.js';
 import type { Sql } from './db.js';
-import type { PushEnv, PushSender } from './push.js';
 
 /** 위치 정확도가 나쁠 때 반경에 더해주는 최대 여유(m). */
 const MAX_ACCURACY_SLACK = 50;
@@ -32,7 +31,6 @@ const isCoord = (v: unknown, max: number) =>
 export interface Deps {
   sql: Sql;
   config: Config;
-  push: PushSender;
   now?: () => Date;
   /** 첫 요청 전에 한 번 실행 (테이블 생성 등) */
   init?: () => Promise<void>;
@@ -40,7 +38,7 @@ export interface Deps {
 
 type Env = { Variables: { member: Member } };
 
-export function createApp({ sql, config, push, now = () => new Date(), init }: Deps) {
+export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
   const app = new Hono<Env>();
   app.use('*', cors());
 
@@ -102,14 +100,6 @@ export function createApp({ sql, config, push, now = () => new Date(), init }: D
 
   app.get('/api/me', (c) => c.json(c.get('member')));
 
-  app.put('/api/push-token', async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const token = typeof body.token === 'string' && /^[0-9a-f]{32,200}$/i.test(body.token) ? body.token : null;
-    const env = body.environment === 'sandbox' ? 'sandbox' : 'production';
-    await sql`UPDATE members SET push_token = ${token}, push_env = ${env} WHERE id = ${c.get('member').id}`;
-    return c.json({ ok: true });
-  });
-
   app.post('/api/checkin', async (c) => {
     const me = c.get('member');
     const body = (await c.req.json().catch(() => ({}))) as Partial<CheckinRequest>;
@@ -138,11 +128,6 @@ export function createApp({ sql, config, push, now = () => new Date(), init }: D
       RETURNING checked_in_at`;
 
     if (inserted.length > 0) {
-      const others = await sql<{ push_token: string; push_env: PushEnv }[]>`
-        SELECT push_token, push_env FROM members WHERE id <> ${me.id} AND push_token IS NOT NULL`;
-      const time = at.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
-      // 서버리스에서는 응답 후 작업이 끊길 수 있어서 보내고 나서 응답한다
-      await push(others.map((o) => ({ token: o.push_token, env: o.push_env })), '💪 출석!', `${me.name}님이 ${time}에 헬스장 도착했어요.`);
       return c.json<CheckinResponse>({
         date,
         checkedInAt: at.toISOString(),

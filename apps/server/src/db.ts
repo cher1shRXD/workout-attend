@@ -17,8 +17,6 @@ export async function migrate(sql: Sql) {
       id          SERIAL PRIMARY KEY,
       name        TEXT NOT NULL UNIQUE,
       token_hash  TEXT NOT NULL UNIQUE,
-      push_token  TEXT,
-      push_env    TEXT NOT NULL DEFAULT 'production',
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
   await sql`
@@ -30,5 +28,4 @@ export async function migrate(sql: Sql) {
       distance_m     INTEGER NOT NULL,
       PRIMARY KEY (member_id, date)
     )`;
-  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS push_env TEXT NOT NULL DEFAULT 'production'`;
 }
