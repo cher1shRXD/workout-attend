@@ -18,5 +18,5 @@
     "typescript": "~6.0.3",
     "@hono/node-server": "^2.1.5"
   },
-  "packageManager": "pnpm@11.13.0"
+  "packageManager": "pnpm@11.28.8"
 }

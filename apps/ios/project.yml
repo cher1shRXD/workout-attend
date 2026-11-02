@@ -17,7 +17,7 @@ configs:
   Debug:
     API_BASE_URL: "http://localhost:3000"
   Release:
-    API_BASE_URL: "https://YOUR-PROJECT.vercel.app"
+    API_BASE_URL: "https://workout-attend.vercel.app"
 targets:
   WorkoutAttend:
     type: application

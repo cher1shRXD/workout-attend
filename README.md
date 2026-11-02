@@ -53,7 +53,7 @@ Vercel 무료(Hobby) 플랜은 서버를 요청이 올 때만 실행하고, 잠�
    - 리전은 **Singapore (ap-southeast-1)** 로 고른다. `vercel.json` 에서 함수 리전을 `sin1` 으로 맞춰 뒀다.
    - `DATABASE_URL` 이 자동으로 들어간다. 테이블은 첫 요청 때 자동으로 만든다.
 4. **Settings → Environment Variables** 에 아래 값을 넣고 Redeploy 한다.
-5. `https://<프로젝트>.vercel.app/api/health` 가 `{"ok":true}` 를 주면 끝이다. 이 주소를 `apps/ios/project.yml` 의 Release `API_BASE_URL` 에 넣는다.
+5. `https://<프로젝트>.vercel.app/api/health` 가 `{"ok":true}` 를 주면 끝이다. 이 주소를 `apps/ios/project.yml` 의 Release `API_BASE_URL` 에 넣는다. (현재 배포: https://workout-attend.vercel.app)
 
 이후에는 main 브랜치에 push 하면 자동으로 다시 배포된다.
 
