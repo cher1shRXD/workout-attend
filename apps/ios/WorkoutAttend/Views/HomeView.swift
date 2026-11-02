@@ -130,7 +130,7 @@ struct HomeView: View {
             .listRowBackground(Color.clear)
         } footer: {
             if let t = model.today {
-                Text("아침 \(t.window.startHour)시~\(t.window.endHour)시 · \(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안에서 인정")
+                Text("\(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안에서 하루 한 번 인정")
                     .frame(maxWidth: .infinity)
             }
         }

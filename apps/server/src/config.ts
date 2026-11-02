@@ -9,8 +9,6 @@ export interface Config {
   port: number;
   groupCode: string;
   maxMembers: number;
-  morningStartHour: number;
-  morningEndHour: number;
   /** 종료를 놓친 운동은 이 시간 뒤 자동 종료 */
   maxSessionHours: number;
   gym: { name: string; latitude: number; longitude: number; radiusMeters: number };
@@ -23,8 +21,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: num(env.PORT, 3000),
     groupCode,
     maxMembers: num(env.MAX_MEMBERS, 3),
-    morningStartHour: num(env.MORNING_START_HOUR, 4),
-    morningEndHour: num(env.MORNING_END_HOUR, 12),
     maxSessionHours: num(env.MAX_SESSION_HOURS, 4),
     gym: {
       name: GYM.name,

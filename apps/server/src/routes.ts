@@ -121,12 +121,8 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
     }
     const source = body.source === 'geofence' ? 'geofence' : 'manual';
     const at = now();
-    const { date, hour } = kstParts(at);
-    const { morningStartHour: start, morningEndHour: end, gym } = config;
-
-    if (hour < start || hour >= end) {
-      return c.json({ error: `아침 출석은 ${start}시~${end}시 사이에만 인정돼요.` }, 400);
-    }
+    const { date } = kstParts(at);
+    const { gym } = config;
 
     const dist = distanceMeters(gym, { latitude: body.latitude!, longitude: body.longitude! });
     const accuracy = typeof body.accuracy === 'number' && body.accuracy > 0 ? body.accuracy : 0;
@@ -262,7 +258,8 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
       ORDER BY m.id`;
     return c.json<TodayResponse>({
       date,
-      window: { startHour: config.morningStartHour, endHour: config.morningEndHour },
+      // 예전 앱(빌드 3 이하)이 이 필드를 읽어서 남겨둔다. 출석은 하루 종일 인정.
+      window: { startHour: 0, endHour: 24 },
       gym: config.gym,
       members: rows.map((r) => ({
         id: r.id,

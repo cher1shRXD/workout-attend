@@ -59,7 +59,7 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
     assert.equal((await call('GET', '/api/me', undefined, t1b)).json.name, '태우');
   });
 
-  it('헬스장에서 아침에 출석, 하루 한 번만 기록', async () => {
+  it('헬스장에서 출석, 하루 한 번만 기록', async () => {
     const a = await join('태우');
     const b = await join('민수');
 
@@ -88,12 +88,12 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
     assert.match(r.json.error, /떨어져/);
   });
 
-  it('아침 시간이 아니면 거절', async () => {
+  it('오후·밤에도 출석 인정', async () => {
     const a = await join('태우');
-    clock = new Date('2026-11-03T05:00:00Z'); // KST 14:00
+    clock = new Date('2026-11-03T13:30:00Z'); // KST 22:30
     const r = await call('POST', '/api/checkin', atGym, a);
-    assert.equal(r.status, 400);
-    assert.match(r.json.error, /아침/);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.date, '2026-11-03');
   });
 
   it('토큰 없으면 401', async () => {

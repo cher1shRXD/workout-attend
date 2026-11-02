@@ -52,7 +52,7 @@ export interface TodayMember extends Member {
 
 export interface TodayResponse {
   date: string;
-  /** 아침 인정 시간 (KST, 시 단위) */
+  /** @deprecated 예전 앱 호환용. 항상 0~24 (하루 종일 인정) */
   window: { startHour: number; endHour: number };
   gym: { name: string; latitude: number; longitude: number; radiusMeters: number };
   members: TodayMember[];

@@ -17,7 +17,7 @@ struct JoinView: View {
             VStack(spacing: 8) {
                 Text("🏋️").font(.system(size: 56))
                 Text("헬스 출첵").font(.largeTitle.bold())
-                Text("\(Gym.name)에 아침마다 갔는지\n친구들끼리 확인해요.")
+                Text("\(Gym.name)에 오늘 갔는지\n친구들끼리 확인해요.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
             }

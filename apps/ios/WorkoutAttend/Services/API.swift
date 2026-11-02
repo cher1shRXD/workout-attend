@@ -64,10 +64,8 @@ nonisolated struct CalendarResponse: Codable, Sendable {
 }
 
 nonisolated struct TodayResponse: Codable, Sendable {
-    struct Window: Codable, Sendable { let startHour: Int; let endHour: Int }
     struct GymInfo: Codable, Sendable { let name: String; let latitude: Double; let longitude: Double; let radiusMeters: Double }
     let date: String
-    let window: Window
     let gym: GymInfo
     let members: [TodayMember]
 }

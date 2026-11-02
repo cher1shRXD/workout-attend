@@ -96,7 +96,7 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
         await monitor?.remove(Self.conditionID)
     }
 
-    /// 헬스장 도착: 운동 시작 기록 + (아침이면) 출석
+    /// 헬스장 도착: 운동 시작 기록 + 출석
     private func didEnterGym() async {
         guard Keychain.token != nil else { return }
         let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-enter")
