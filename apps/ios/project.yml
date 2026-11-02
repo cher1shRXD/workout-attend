@@ -13,11 +13,11 @@ settings:
     # Taewoo Kim 팀 (회사 팀 KEISER 쓰지 말 것)
     DEVELOPMENT_TEAM: U4VGJDX962
     CODE_SIGN_STYLE: Automatic
-configs:
-  Debug:
-    API_BASE_URL: "http://localhost:3000"
-  Release:
-    API_BASE_URL: "https://workout-attend.vercel.app"
+  configs:
+    Debug:
+      API_BASE_URL: "http://localhost:3000"
+    Release:
+      API_BASE_URL: "https://workout-attend.vercel.app"
 targets:
   WorkoutAttend:
     type: application
@@ -32,7 +32,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
     info:
       path: WorkoutAttend/Info.plist
       properties:

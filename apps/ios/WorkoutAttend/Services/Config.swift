@@ -5,7 +5,12 @@ nonisolated enum AppConfig {
     /// Info.plist 의 API_BASE_URL (project.yml 의 configs 에서 Debug/Release 별로 지정)
     static let apiBaseURL: URL = {
         let raw = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? ""
-        return URL(string: raw.trimmingCharacters(in: .whitespaces)) ?? URL(string: "http://localhost:3000")!
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        // 빌드 설정이 비어 있으면 실서버로
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            return URL(string: "https://workout-attend.vercel.app")!
+        }
+        return url
     }()
 }
 
