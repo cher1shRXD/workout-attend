@@ -84,8 +84,11 @@ final class AppModel {
         }
     }
 
-    /// 앱이 앞으로 올 때 최신 상태로. 입실/퇴실은 지오펜스가 처리한다.
+    /// 앱이 앞으로 올 때 최신 상태로. 입실/퇴실은 지오펜스가 처리하고,
+    /// 혹시 놓친 게 있으면 현재 위치로 맞춘다.
     func onForeground() async {
+        await refresh()
+        await GymMonitor.shared.reconcileWithCurrentLocation(reason: "foreground")
         await refresh()
     }
 

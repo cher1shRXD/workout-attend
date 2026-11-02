@@ -123,7 +123,11 @@ struct HomeView: View {
                     Text(autoDescription).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if monitor.autoStatus == .on {
+                if monitor.autoStatus == .on && !monitor.preciseLocation {
+                    Button("설정") { monitor.openSettings() }
+                        .buttonStyle(.bordered)
+                        .tint(.orange)
+                } else if monitor.autoStatus == .on {
                     Text("ON").bold().foregroundStyle(.green)
                 } else {
                     Button("켜기") { monitor.requestPermission() }
@@ -134,7 +138,10 @@ struct HomeView: View {
     }
 
     private var autoDescription: String {
-        switch monitor.autoStatus {
+        if monitor.autoStatus == .on && !monitor.preciseLocation {
+            return "\"정확한 위치\"가 꺼져 있어서 자동 기록이 안 돼요. 설정 > 헬스 출첵 > 위치에서 켜주세요."
+        }
+        return switch monitor.autoStatus {
         case .on: "헬스장에 들어가면 출석·운동 시작이, 나오면 운동 종료가 자동으로 기록돼요."
         case .whenInUseOnly: "위치를 \"항상\"으로 바꾸면 앱을 안 열어도 입실·퇴실이 자동으로 기록돼요."
         case .notDetermined, .off: "위치 권한을 \"항상\" 허용하면 입실·퇴실이 자동으로 기록돼요."
