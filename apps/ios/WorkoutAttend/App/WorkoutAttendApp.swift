@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         #if DEBUG
-        // 시뮬레이터 테스트용: `simctl launch <dev> dev.workoutattend.app -debugToken <토큰>`
+        // 시뮬레이터 테스트용: `simctl launch <dev> com.taewookim.workoutattend -debugToken <토큰>`
         if let token = UserDefaults.standard.string(forKey: "debugToken") { Keychain.setToken(token) }
         #endif
         // 지오펜스 이벤트로 백그라운드에서 깨어난 경우에도 모니터를 다시 붙여야 이벤트를 받는다.

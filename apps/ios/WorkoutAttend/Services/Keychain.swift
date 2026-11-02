@@ -3,7 +3,7 @@ import Security
 
 /// 로그인 토큰 저장소. 잠금 상태의 백그라운드(지오펜스)에서도 읽을 수 있게 AfterFirstUnlock.
 nonisolated enum Keychain {
-    private static let service = "dev.workoutattend.app"
+    private static let service = "com.taewookim.workoutattend"
     private static let account = "auth-token"
 
     private static var baseQuery: [String: Any] {
