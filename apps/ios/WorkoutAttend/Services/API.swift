@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 // MARK: - 모델 (서버 apps/server/src/shared.ts 와 동일)
@@ -16,26 +17,17 @@ nonisolated enum CheckinSource: String, Codable, Sendable {
     case manual, geofence
 }
 
-nonisolated struct CheckinRequest: Codable, Sendable {
-    let latitude: Double
-    let longitude: Double
-    let accuracy: Double?
-    let source: CheckinSource
-}
-
-nonisolated struct CheckinResponse: Codable, Sendable {
-    let date: String
-    let checkedInAt: String
-    let alreadyCheckedIn: Bool
-    let distanceMeters: Int
-}
-
 nonisolated struct TodayMember: Codable, Identifiable, Sendable {
     let id: Int
     let name: String
+    /// 오늘 첫 입실(=출석) 시각
     let checkedInAt: String?
     /// 지금 운동 중이면 시작 시각
     let activeSince: String?
+    /// 오늘 운동한 총 시간(초)
+    let seconds: Int
+    /// 오늘 입실 횟수
+    let visits: Int
 }
 
 nonisolated struct WorkoutSession: Codable, Sendable {
@@ -109,17 +101,24 @@ nonisolated enum API {
         try await request("GET", "/api/me")
     }
 
-    static func checkin(_ body: CheckinRequest) async throws -> CheckinResponse {
-        try await request("POST", "/api/checkin", body: body)
-    }
-
     static func today() async throws -> TodayResponse {
         try await request("GET", "/api/today")
     }
 
-    static func startSession(source: CheckinSource) async throws -> SessionResponse {
-        struct Body: Encodable { let source: CheckinSource }
-        return try await request("POST", "/api/sessions/start", body: Body(source: source))
+    /// 입실 = 출석 + 운동 시작. 수동이면 위치를 보내야 한다(서버가 헬스장 반경 안인지 확인).
+    static func startSession(source: CheckinSource, location: CLLocation?) async throws -> SessionResponse {
+        struct Body: Encodable {
+            let source: CheckinSource
+            let latitude: Double?
+            let longitude: Double?
+            let accuracy: Double?
+        }
+        return try await request("POST", "/api/sessions/start", body: Body(
+            source: source,
+            latitude: location?.coordinate.latitude,
+            longitude: location?.coordinate.longitude,
+            accuracy: location?.horizontalAccuracy
+        ))
     }
 
     static func endSession(source: CheckinSource) async throws -> SessionResponse {

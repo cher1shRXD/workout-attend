@@ -96,51 +96,39 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
         await monitor?.remove(Self.conditionID)
     }
 
-    /// 헬스장 도착: 운동 시작 기록 + 출석
+    /// 헬스장 입실 = 출석 + 운동 시작
     private func didEnterGym() async {
         guard Keychain.token != nil else { return }
         let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-enter")
         defer { UIApplication.shared.endBackgroundTask(bgTask) }
-
-        // 위치 측정이 필요 없는 운동 시작을 먼저 (백그라운드 시간이 짧다)
-        let session: SessionResponse?
-        do { session = try await API.startSession(source: .geofence) } catch {
-            log.error("start failed \(error.localizedDescription, privacy: .public)")
-            session = nil
-        }
-        let startedNow = session.map { !$0.unchanged } ?? false
-        let checkin = try? await checkinHere(source: .geofence)
-        let checkedInNow = checkin.map { !$0.alreadyCheckedIn } ?? false
-
-        if checkedInNow {
-            await Notifications.local(title: "출석 완료 💪", body: "\(Gym.name) 도착! 운동 기록을 시작했어요.")
-        } else if startedNow, let s = session?.session, Format.isRecent(s.startedAt) {
+        do {
+            let res = try await API.startSession(source: .geofence, location: nil)
             // 잠깐 나갔다 들어와 이전 운동을 이어가는 경우엔 알리지 않는다
-            await Notifications.local(title: "운동 시작 🏋️", body: "\(Gym.name) 도착! 운동 기록을 시작했어요.")
+            if !res.unchanged, let s = res.session, Format.isRecent(s.startedAt) {
+                await Notifications.local(title: "출석 💪", body: "\(Gym.name) 입실! 운동 기록을 시작했어요.")
+            }
+        } catch {
+            log.error("start failed \(error.localizedDescription, privacy: .public)")
         }
         onCheckedIn?()
     }
 
-    /// 헬스장을 떠남: 운동 종료 기록
+    /// 헬스장 퇴실 = 운동 종료
     private func didLeaveGym() async {
         guard Keychain.token != nil else { return }
         let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-leave")
         defer { UIApplication.shared.endBackgroundTask(bgTask) }
         guard let res = try? await API.endSession(source: .geofence), !res.unchanged, let s = res.session else { return }
-        await Notifications.local(title: "운동 종료 👋", body: "오늘 \(Format.duration(from: s.startedAt, to: s.endedAt)) 운동했어요.")
+        await Notifications.local(title: "퇴실 👋", body: "이번에 \(Format.duration(from: s.startedAt, to: s.endedAt)) 운동했어요.")
         onCheckedIn?()
     }
 
-    // MARK: 현재 위치로 출석
+    // MARK: 수동 입실
 
-    func checkinHere(source: CheckinSource) async throws -> CheckinResponse {
+    /// 현재 위치로 수동 입실. 서버가 헬스장 반경 안인지 확인한다.
+    func startHere() async throws -> SessionResponse {
         let location = try await currentLocation()
-        return try await API.checkin(CheckinRequest(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
-            accuracy: location.horizontalAccuracy,
-            source: source
-        ))
+        return try await API.startSession(source: .manual, location: location)
     }
 
     /// 정확도 65m 이내 위치를 최대 15초 기다린다. 못 받으면 가장 좋은 값을 쓴다.

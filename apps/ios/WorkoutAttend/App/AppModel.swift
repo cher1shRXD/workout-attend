@@ -12,15 +12,8 @@ final class AppModel {
     var calendarMonth: String = Format.currentMonth()
     var loadError: String?
 
-    private var silentTriedDate: String?
-
     var me: Member? {
         if case .loggedIn(let m) = phase { m } else { nil }
-    }
-
-    var myTodayCheckin: String? {
-        guard let me else { return nil }
-        return today?.members.first { $0.id == me.id }?.checkedInAt
     }
 
     /// 지금 내가 운동 중이면 시작 시각
@@ -91,16 +84,9 @@ final class AppModel {
         }
     }
 
-    /// 앱을 열 때 헬스장이면 조용히 출석 (지오펜스를 놓친 경우 대비)
+    /// 앱이 앞으로 올 때 최신 상태로. 입실/퇴실은 지오펜스가 처리한다.
     func onForeground() async {
         await refresh()
-        guard let today, myTodayCheckin == nil, silentTriedDate != today.date else { return }
-        let auth = GymMonitor.shared.authorization
-        guard auth == .authorizedAlways || auth == .authorizedWhenInUse else { return }
-        silentTriedDate = today.date
-        if (try? await GymMonitor.shared.checkinHere(source: .manual)) != nil {
-            await refresh()
-        }
     }
 
     func showMonth(offset: Int) async {
@@ -109,8 +95,9 @@ final class AppModel {
         if let cal = try? await API.calendar(month: month), month == calendarMonth { calendar = cal }
     }
 
+    /// 수동 입실 (지오펜스가 놓쳤을 때). 헬스장 반경 안이어야 한다.
     func startWorkout() async throws {
-        _ = try await API.startSession(source: .manual)
+        _ = try await GymMonitor.shared.startHere()
         await refresh()
     }
 
@@ -120,9 +107,4 @@ final class AppModel {
         return res.session
     }
 
-    func checkinNow() async throws -> CheckinResponse {
-        let res = try await GymMonitor.shared.checkinHere(source: .manual)
-        await refresh()
-        return res
-    }
 }

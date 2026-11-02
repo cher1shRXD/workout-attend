@@ -44,10 +44,14 @@ export interface CheckinResponse {
 }
 
 export interface TodayMember extends Member {
-  /** ISO 시각. 안 왔으면 null */
+  /** 오늘 첫 입실(=출석) 시각. 안 왔으면 null */
   checkedInAt: string | null;
   /** 지금 운동 중이면 시작 시각 */
   activeSince: string | null;
+  /** 오늘 운동한 총 시간(초), 진행 중이면 지금까지 */
+  seconds: number;
+  /** 오늘 입실 횟수 */
+  visits: number;
 }
 
 export interface TodayResponse {
@@ -56,11 +60,6 @@ export interface TodayResponse {
   window: { startHour: number; endHour: number };
   gym: { name: string; latitude: number; longitude: number; radiusMeters: number };
   members: TodayMember[];
-}
-
-export interface HistoryResponse {
-  dates: string[];
-  members: (Member & { attended: Record<string, string> })[];
 }
 
 export type SessionSource = 'manual' | 'geofence';
@@ -80,6 +79,7 @@ export interface SessionResponse {
 
 export interface CalendarEntry {
   memberId: number;
+  /** 그날 첫 입실(=출석) 시각 */
   attendedAt: string | null;
   /** 그날 운동한 총 시간(초). 진행 중인 운동은 지금까지 */
   seconds: number;

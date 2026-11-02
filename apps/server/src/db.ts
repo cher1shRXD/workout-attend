@@ -19,6 +19,7 @@ export async function migrate(sql: Sql) {
       token_hash  TEXT NOT NULL UNIQUE,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
+  // 예전 출석 기록 (지금은 입실 = 출석이라 sessions 만 쓴다)
   await sql`
     CREATE TABLE IF NOT EXISTS attendance (
       member_id      INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

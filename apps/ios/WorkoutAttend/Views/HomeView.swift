@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppModel.self) private var model
-    @State private var checking = false
     @State private var alert: (title: String, message: String)?
     @State private var confirmLogout = false
     @State private var selectedDay: SelectedDay?
@@ -20,7 +19,6 @@ struct HomeView: View {
                     CalendarView(selectedDay: $selectedDay)
                 }
                 todaySection
-                checkinSection
                 autoSection
             }
             .navigationTitle(title)
@@ -72,21 +70,27 @@ struct HomeView: View {
             if let today = model.today {
                 ForEach(today.members) { m in
                     HStack(spacing: 12) {
-                        MemberAvatar(name: m.name, color: m.checkedInAt == nil ? Color.gray.opacity(0.4) : .green)
+                        MemberAvatar(name: m.name, color: m.activeSince != nil ? .orange : m.visits > 0 ? .green : Color.gray.opacity(0.4))
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
                                 Text(m.name).font(.body.weight(.semibold))
                                 if m.id == model.me?.id { Text("나").font(.caption).foregroundStyle(.secondary) }
                             }
-                            if let since = m.activeSince {
-                                Label("운동 중 · \(Format.time(since))부터", systemImage: "figure.strengthtraining.traditional")
+                            if let at = m.checkedInAt {
+                                Text("출석 \(Format.time(at))" + (m.visits > 1 ? " · \(m.visits)번 입실" : ""))
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
-                        if let at = m.checkedInAt {
-                            Label(Format.time(at), systemImage: "checkmark")
+                        if m.activeSince != nil {
+                            Label("운동 중", systemImage: "figure.strengthtraining.traditional")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(.orange.opacity(0.15), in: .capsule)
+                        } else if m.visits > 0 {
+                            Label(Format.duration(seconds: m.seconds), systemImage: "checkmark")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(.green)
                                 .padding(.horizontal, 10).padding(.vertical, 4)
@@ -102,60 +106,9 @@ struct HomeView: View {
             }
         } header: {
             if let today = model.today { Text("오늘 출석 · \(Format.day(today.date).label)") }
-        }
-    }
-
-    // MARK: 출석 버튼
-
-    private var checkinSection: some View {
-        Section {
-            Button(action: checkin) {
-                HStack {
-                    Spacer()
-                    if checking {
-                        ProgressView().tint(.white)
-                    } else if let at = model.myTodayCheckin {
-                        Text("오늘 출석 완료 · \(Format.time(at))").bold()
-                    } else {
-                        Text("지금 출석 체크").bold()
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(model.myTodayCheckin == nil ? .accentColor : .green)
-            .disabled(checking || model.myTodayCheckin != nil)
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
         } footer: {
             if let t = model.today {
-                Text("\(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안에서 하루 한 번 인정")
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private func checkin() {
-        switch monitor.autoStatus {
-        case .notDetermined, .off:
-            monitor.requestPermission()
-            if monitor.autoStatus == .off {
-                alert = ("위치 권한 필요", "설정에서 헬스 출첵의 위치 권한을 허용해주세요.")
-            }
-            return
-        default: break
-        }
-        checking = true
-        Task {
-            defer { checking = false }
-            do {
-                let res = try await model.checkinNow()
-                alert = res.alreadyCheckedIn
-                    ? ("이미 출석했어요", "\(Format.time(res.checkedInAt)) 출석")
-                    : ("출석 완료 💪", "\(Format.time(res.checkedInAt)) 출석")
-            } catch {
-                alert = ("출석 실패", error.localizedDescription)
+                Text("\(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안에 들어가면 출석과 함께 운동이 시작되고, 나오면 끝나요. 하루에 여러 번 가도 모두 기록돼요.")
             }
         }
     }
@@ -182,9 +135,9 @@ struct HomeView: View {
 
     private var autoDescription: String {
         switch monitor.autoStatus {
-        case .on: "헬스장에 도착하면 출석과 운동 시작이, 떠나면 운동 종료가 자동으로 기록돼요."
-        case .whenInUseOnly: "위치를 \"항상\"으로 바꾸면 앱을 안 열어도 출석과 운동 시간이 자동으로 기록돼요."
-        case .notDetermined, .off: "위치 권한을 \"항상\" 허용하면 출석과 운동 시간이 자동으로 기록돼요."
+        case .on: "헬스장에 들어가면 출석·운동 시작이, 나오면 운동 종료가 자동으로 기록돼요."
+        case .whenInUseOnly: "위치를 \"항상\"으로 바꾸면 앱을 안 열어도 입실·퇴실이 자동으로 기록돼요."
+        case .notDetermined, .off: "위치 권한을 \"항상\" 허용하면 입실·퇴실이 자동으로 기록돼요."
         }
     }
 }
@@ -210,13 +163,13 @@ private struct WorkoutSection: View {
                                 .font(.system(size: 44, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                         }
-                        Text("\(Format.time(since)) 시작").font(.footnote).foregroundStyle(.secondary)
+                        Text("\(Format.time(since)) 입실").font(.footnote).foregroundStyle(.secondary)
                     }
                     button(title: "운동 종료", systemImage: "stop.fill", tint: .red) { confirmEnd = true }
                 } else {
                     VStack(spacing: 4) {
                         Text("오늘도 운동하러 가볼까요?").font(.headline)
-                        Text("헬스장에 도착하면 자동으로 시작돼요").font(.footnote).foregroundStyle(.secondary)
+                        Text("헬스장에 들어가면 출석과 함께 자동으로 시작돼요").font(.footnote).foregroundStyle(.secondary)
                     }
                     button(title: "운동 시작", systemImage: "play.fill", tint: .accentColor, action: start)
                 }
@@ -246,6 +199,14 @@ private struct WorkoutSection: View {
         busy = true
         Task {
             defer { busy = false }
+            let monitor = GymMonitor.shared
+            guard monitor.autoStatus == .on || monitor.autoStatus == .whenInUseOnly else {
+                monitor.requestPermission()
+                if monitor.autoStatus == .off {
+                    alert = ("위치 권한 필요", "헬스장에 있는지 확인하려면 위치 권한이 필요해요. 설정에서 허용해주세요.")
+                }
+                return
+            }
             do { try await model.startWorkout() } catch { alert = ("운동 시작 실패", error.localizedDescription) }
         }
     }
