@@ -105,20 +105,10 @@ nonisolated enum API {
         try await request("GET", "/api/today")
     }
 
-    /// 입실 = 출석 + 운동 시작. 수동이면 위치를 보내야 한다(서버가 헬스장 반경 안인지 확인).
-    static func startSession(source: CheckinSource, location: CLLocation?) async throws -> SessionResponse {
-        struct Body: Encodable {
-            let source: CheckinSource
-            let latitude: Double?
-            let longitude: Double?
-            let accuracy: Double?
-        }
-        return try await request("POST", "/api/sessions/start", body: Body(
-            source: source,
-            latitude: location?.coordinate.latitude,
-            longitude: location?.coordinate.longitude,
-            accuracy: location?.horizontalAccuracy
-        ))
+    /// 입실 = 출석 + 운동 시작. 위치 조건 없음.
+    static func startSession(source: CheckinSource) async throws -> SessionResponse {
+        struct Body: Encodable { let source: CheckinSource }
+        return try await request("POST", "/api/sessions/start", body: Body(source: source))
     }
 
     static func endSession(source: CheckinSource) async throws -> SessionResponse {

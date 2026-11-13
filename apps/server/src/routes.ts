@@ -120,7 +120,7 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
     SET ended_at = started_at + make_interval(hours => ${config.maxSessionHours}), end_source = 'timeout'
     WHERE ended_at IS NULL AND started_at < ${at}::timestamptz - make_interval(hours => ${config.maxSessionHours})`;
 
-  /** 보낸 좌표가 헬스장 반경 안인지. 아니면 에러 메시지. */
+  /** 보낸 좌표가 헬스장 반경 안인지. 아니면 에러 메시지. (예전 앱의 /api/checkin 용) */
   const checkLocation = (body: Record<string, unknown>): { ok: true } | { ok: false; error: string } => {
     if (!isCoord(body.latitude, 90) || !isCoord(body.longitude, 180)) {
       return { ok: false, error: '위치 정보가 필요해요. 위치 권한을 확인해주세요.' };
@@ -168,15 +168,10 @@ export function createApp({ sql, config, now = () => new Date(), init }: Deps) {
 
   const readBody = async (c: Context) => ((await c.req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
 
-  // 입실 = 출석 + 운동 시작.
-  // 지오펜스 진입은 그 자체가 위치 증명이라 좌표 검사 없이, 수동 시작은 헬스장 반경 안인지 확인한다.
+  // 입실 = 출석 + 운동 시작. 지오펜스든 수동이든 위치 조건 없이 받는다.
   app.post('/api/sessions/start', async (c) => {
     const body = await readBody(c);
     const source = body.source === 'geofence' ? 'geofence' : 'manual';
-    if (source === 'manual') {
-      const loc = checkLocation(body);
-      if (!loc.ok) return c.json({ error: loc.error }, 400);
-    }
     return c.json<SessionResponse>(await startSession(c.get('member').id, source, now()));
   });
 

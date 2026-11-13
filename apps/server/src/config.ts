@@ -11,7 +11,12 @@ export interface Config {
   maxMembers: number;
   /** 종료를 놓친 운동은 이 시간 뒤 자동 종료 */
   maxSessionHours: number;
-  gym: { name: string; latitude: number; longitude: number; radiusMeters: number };
+  gym: {
+    name: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

@@ -98,9 +98,9 @@ final class AppModel {
         if let cal = try? await API.calendar(month: month), month == calendarMonth { calendar = cal }
     }
 
-    /// 수동 입실 (지오펜스가 놓쳤을 때). 헬스장 반경 안이어야 한다.
+    /// 수동 입실 (지오펜스가 놓쳤을 때). 위치 조건 없음.
     func startWorkout() async throws {
-        _ = try await GymMonitor.shared.startHere()
+        _ = try await API.startSession(source: .manual)
         await refresh()
     }
 

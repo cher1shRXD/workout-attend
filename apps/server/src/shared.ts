@@ -6,7 +6,7 @@ export const GYM = {
   latitude: 37.40163,
   longitude: 126.72276,
   /** 이 반경(m) 안이면 헬스장에 있는 걸로 본다. */
-  radiusMeters: 100,
+  radiusMeters: 50,
 } as const;
 
 export const TIME_ZONE = 'Asia/Seoul';

@@ -69,7 +69,7 @@ Vercel 무료(Hobby) 플랜은 서버를 요청이 올 때만 실행하고, 잠�
 | `GROUP_CODE` | ✅ | 친구들끼리만 아는 가입 코드 |
 | `MAX_MEMBERS` | | 기본 3 |
 | `MAX_SESSION_HOURS` | | 종료를 놓친 운동 자동 종료 시간, 기본 4 |
-| `GYM_LATITUDE` / `GYM_LONGITUDE` / `GYM_RADIUS_METERS` | | 헬스장 좌표 덮어쓰기 |
+| `GYM_LATITUDE` / `GYM_LONGITUDE` / `GYM_RADIUS_METERS` | | 헬스장 좌표 덮어쓰기 (기본 반경 50m) |
 
 ## 친구 폰에 설치하기
 

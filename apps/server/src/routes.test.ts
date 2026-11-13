@@ -67,13 +67,16 @@ describe('api', { skip: !url && 'TEST_DATABASE_URL 미설정' }, () => {
   });
 
   describe('입실(출석·운동 시작) / 퇴실(운동 종료)', () => {
-    it('수동 입실은 헬스장 반경 안에서만, 위치 없으면 거절', async () => {
+    it('수동 입실은 위치 조건 없이 가능', async () => {
       const a = await join('태우');
-      const far = await start(a, { ...atGym, latitude: GYM.latitude + 0.01 });
-      assert.equal(far.status, 400);
-      assert.match(far.json.error, /떨어져/);
-      assert.equal((await start(a, { source: 'manual' })).status, 400);
-      assert.equal((await start(a)).status, 200);
+      const r = await start(a, { source: 'manual' });
+      assert.equal(r.status, 200);
+      assert.equal(r.json.unchanged, false);
+    });
+
+    it('수동 입실은 헬스장에서 멀어도 가능', async () => {
+      const a = await join('태우');
+      assert.equal((await start(a, { ...atGym, latitude: GYM.latitude + 0.01 })).status, 200);
     });
 
     it('지오펜스 입실은 좌표 없이 가능', async () => {
