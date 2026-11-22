@@ -21,11 +21,8 @@ nonisolated enum Gym {
     static let coordinate = CLLocationCoordinate2D(latitude: 37.40163, longitude: 126.72276)
     static let radius: CLLocationDistance = 50
     /// 해발고도(m)가 이 범위 안이어야 헬스장 층(5층)에 있는 걸로 본다.
+    /// 입실 = 반경 안 AND 이 고도, 퇴실 = 그 조건이 깨짐 (예: 1층으로 내려감).
     static let altitudeRange: ClosedRange<CLLocationDistance> = 15...22
-
-    /// 고도가 달라도 이 반경 안에 nearDuration 이상 머물면 출석으로 본다.
-    static let nearRadius: CLLocationDistance = 25
-    static let nearDuration: TimeInterval = 10 * 60
 
     /// 헬스장 층 고도인지. 고도를 못 받았으면 false.
     static func isOnFloor(_ location: CLLocation) -> Bool {

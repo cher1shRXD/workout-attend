@@ -108,7 +108,7 @@ struct HomeView: View {
             if let today = model.today { Text("오늘 출석 · \(Format.day(today.date).label)") }
         } footer: {
             if let t = model.today {
-                Text("\(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안, 헬스장 층에 들어가면 출석과 함께 운동이 시작되고, 나오면 끝나요. 하루에 여러 번 가도 모두 기록돼요.")
+                Text("\(t.gym.name) 반경 \(Int(t.gym.radiusMeters))m 안, 헬스장 층에 들어가면 출석과 함께 운동이 시작되고, 헬스장 층을 벗어나면(1층으로 내려가는 등) 끝나요. 하루에 여러 번 가도 모두 기록돼요.")
             }
         }
     }

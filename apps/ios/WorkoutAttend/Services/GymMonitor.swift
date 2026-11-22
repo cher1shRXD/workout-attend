@@ -104,6 +104,8 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
             if let last = await monitor.record(for: Self.conditionID)?.lastEvent {
                 await self.handle(state: last.state, date: last.date, via: "record")
             }
+            // 입실 상태로 다시 실행됐으면 층을 벗어나는지 계속 본다
+            if self.isInside { self.watchPresence() }
             log.info("monitor ready launchedForLocation=\(launchedForLocation, privacy: .public)")
             if launchedForLocation { self.scheduleLaunchFallback() }
             do {
@@ -120,6 +122,8 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
     func stopMonitoring() async {
         monitorTask?.cancel()
         monitorTask = nil
+        presenceWatch?.cancel()
+        presenceWatch = nil
         await monitor?.remove(Self.conditionID)
         serviceSession?.invalidate()
         serviceSession = nil
@@ -138,11 +142,11 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
         UserDefaults.standard.set(date, forKey: Self.handledKey)
         handledSinceLaunch = true
         if state == .satisfied {
-            // 반경에 들어온 것만으로는 부족하다. 헬스장 층 고도가 확인되면 입실.
-            watchForGymFloor()
+            // 반경에 들어온 것만으로는 부족하다. 반경 안 + 헬스장 층 고도가 확인되면 입실.
+            watchPresence()
         } else {
-            floorWatch?.cancel()
-            floorWatch = nil
+            presenceWatch?.cancel()
+            presenceWatch = nil
             UserDefaults.standard.set(false, forKey: Self.insideKey)
             await didLeaveGym()
         }
@@ -150,77 +154,75 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
 
     // MARK: 층(고도) 확인
 
-    private var floorWatch: Task<Void, Never>?
-    /// 반경에 들어온 뒤 입실 조건을 기다리는 최대 시간
-    private static let floorWatchTimeout: Duration = .seconds(30 * 60)
-    /// Gym.nearRadius 안에 계속 머문 시작 시각 (고도와 상관없이 오래 있으면 입실)
-    private var nearGymSince: Date?
+    private var presenceWatch: Task<Void, Never>?
+    /// 헬스장 밖(다른 층)에서 입실을 기다리는 최대 시간
+    private static let entryWatchTimeout: Duration = .seconds(30 * 60)
+    /// GPS 고도는 흔들리므로, 헬스장 층을 벗어난 값이 이 시간·횟수 이상 이어져야 퇴실로 본다
+    private static let leaveConfirmDuration: TimeInterval = 60
+    private static let leaveConfirmCount = 3
 
-    /// 반경 안에서 아래 중 하나가 되면 입실 처리. 반경을 벗어나거나 시간이 지나면 그만둔다.
-    /// - 고도가 헬스장 층 범위
-    /// - 고도가 달라도 Gym.nearRadius 안에 Gym.nearDuration 이상 머묾
-    private func watchForGymFloor() {
-        guard floorWatch == nil else { return }
-        floorWatch = Task {
-            // 가만히 있으면 위치 업데이트가 멈추고 앱이 정지될 수 있어서, 감시하는 동안 백그라운드 실행을 유지한다
+    private var isInside: Bool { UserDefaults.standard.object(forKey: Self.insideKey) as? Bool == true }
+
+    /// 반경 근처에 있는 동안 위치를 계속 본다.
+    /// - (반경 안 AND 헬스장 층 고도) 이면 입실
+    /// - 입실 상태에서 그 조건이 깨지면(예: 1층으로 내려감) 퇴실
+    /// 반경을 확실히 벗어나면 그만둔다. 입실 전에는 entryWatchTimeout 이 지나도 그만둔다.
+    private func watchPresence() {
+        guard presenceWatch == nil else { return }
+        presenceWatch = Task {
+            // 가만히 있어도 앱이 정지되지 않게 백그라운드 위치 세션을 유지한다
             let activity = CLBackgroundActivitySession()
-            let bgTask = UIApplication.shared.beginBackgroundTask(withName: "gym-floor")
-            nearGymSince = nil
-            // 가만히 있어서 업데이트가 안 와도 머문 시간을 확인한다
-            let ticker = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(30))
-                    if self.stayedNearLongEnough() {
-                        await self.enterFromWatch(reason: "stay")
-                        self.floorWatch?.cancel()
-                        return
-                    }
-                }
-            }
             defer {
-                ticker.cancel()
                 activity.invalidate()
-                UIApplication.shared.endBackgroundTask(bgTask)
-                nearGymSince = nil
-                floorWatch = nil
+                presenceWatch = nil
             }
             let gym = CLLocation(latitude: Gym.coordinate.latitude, longitude: Gym.coordinate.longitude)
-            let deadline = ContinuousClock.now + Self.floorWatchTimeout
+            var waitingSince = ContinuousClock.now
+            var offSince: Date?
+            var offCount = 0
             do {
                 for try await update in CLLocationUpdate.liveUpdates() {
-                    if Task.isCancelled || ContinuousClock.now >= deadline { break }
+                    if Task.isCancelled { break }
                     guard let loc = update.location, loc.horizontalAccuracy >= 0 else { continue }
                     let distance = loc.distance(from: gym)
-                    log.info("floor watch distance=\(Int(distance), privacy: .public) alt=\(loc.altitude, privacy: .public) vacc=\(loc.verticalAccuracy, privacy: .public)")
-                    if distance > Gym.radius + 30 { break }
-                    if distance <= Gym.nearRadius { nearGymSince = nearGymSince ?? loc.timestamp } else { nearGymSince = nil }
-                    if distance <= Gym.radius && Gym.isOnFloor(loc) {
-                        await enterFromWatch(reason: "floor")
+                    log.info("presence distance=\(Int(distance), privacy: .public) alt=\(loc.altitude, privacy: .public) vacc=\(loc.verticalAccuracy, privacy: .public) inside=\(self.isInside, privacy: .public)")
+                    if distance > Gym.radius + 30 {
+                        await setInside(false, reason: "far")
                         break
                     }
-                    if stayedNearLongEnough() {
-                        await enterFromWatch(reason: "stay")
+                    if distance <= Gym.radius && Gym.isOnFloor(loc) {
+                        offSince = nil
+                        offCount = 0
+                        await setInside(true, reason: "floor")
+                    } else if isInside {
+                        // 고도를 못 받은 값으로는 퇴실 판단을 하지 않는다
+                        if distance <= Gym.radius && loc.verticalAccuracy < 0 { continue }
+                        let since = offSince ?? loc.timestamp
+                        offSince = since
+                        offCount += 1
+                        if offCount >= Self.leaveConfirmCount && loc.timestamp.timeIntervalSince(since) >= Self.leaveConfirmDuration {
+                            await setInside(false, reason: "off-floor")
+                            offSince = nil
+                            offCount = 0
+                            waitingSince = .now
+                        }
+                    } else if ContinuousClock.now - waitingSince >= Self.entryWatchTimeout {
                         break
                     }
                 }
             } catch {
-                log.error("floor watch error \(error.localizedDescription, privacy: .public)")
+                log.error("presence watch error \(error.localizedDescription, privacy: .public)")
             }
         }
     }
 
-    private func stayedNearLongEnough() -> Bool {
-        guard let since = nearGymSince else { return false }
-        return Date().timeIntervalSince(since) >= Gym.nearDuration
-    }
-
-    private func enterFromWatch(reason: String) async {
-        // 고도 확인과 머문 시간 확인이 동시에 통과해도 한 번만
-        guard UserDefaults.standard.object(forKey: Self.insideKey) as? Bool != true else { return }
-        log.info("enter via \(reason, privacy: .public)")
+    /// 상태가 바뀔 때만 입실/퇴실 처리
+    private func setInside(_ inside: Bool, reason: String) async {
+        guard isInside != inside else { return }
+        log.info("\(inside ? "enter" : "leave", privacy: .public) via \(reason, privacy: .public)")
         UserDefaults.standard.set(Date(), forKey: Self.handledKey)
-        UserDefaults.standard.set(true, forKey: Self.insideKey)
-        await didEnterGym()
+        UserDefaults.standard.set(inside, forKey: Self.insideKey)
+        if inside { await didEnterGym() } else { await didLeaveGym() }
     }
 
     /// 위치 이벤트로 깨어났는데 이벤트가 전달되지 않는 경우가 있어서(앱이 듣기 전에 지나감),
@@ -245,19 +247,15 @@ final class GymMonitor: NSObject, CLLocationManagerDelegate {
         let distance = location.distance(from: gym)
         let lastInside = UserDefaults.standard.object(forKey: Self.insideKey) as? Bool
         log.info("reconcile(\(reason, privacy: .public)) distance=\(Int(distance), privacy: .public) alt=\(location.altitude, privacy: .public) last=\(String(describing: lastInside), privacy: .public)")
-        // 입실은 반경 + 헬스장 층 고도, 퇴실은 반경을 확실히 벗어났을 때만
-        let inside: Bool
-        if distance <= Gym.radius && Gym.isOnFloor(location) { inside = true }
-        else if distance > Gym.radius + 30 { inside = false }
-        else {
-            // 반경 안인데 아직 다른 층이면 올라올 때까지 지켜본다. 경계 근처는 판단 보류.
-            if distance <= Gym.radius && lastInside != true { watchForGymFloor() }
-            return
+        // 입실은 반경 안 AND 헬스장 층 고도. 반경을 확실히 벗어났으면 바로 퇴실.
+        // 그 밖(반경 안인데 다른 층 등)은 값 하나로 판단하지 않고 지켜본다.
+        if distance > Gym.radius + 30 {
+            await setInside(false, reason: "reconcile-far")
+        } else if distance <= Gym.radius && Gym.isOnFloor(location) {
+            await setInside(true, reason: "reconcile-floor")
+        } else if distance <= Gym.radius || lastInside == true {
+            watchPresence()
         }
-        guard lastInside != inside else { return }
-        UserDefaults.standard.set(Date(), forKey: Self.handledKey)
-        UserDefaults.standard.set(inside, forKey: Self.insideKey)
-        if inside { await didEnterGym() } else { await didLeaveGym() }
     }
 
     /// 헬스장 입실 = 출석 + 운동 시작
